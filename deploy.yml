@@ -1,0 +1,60 @@
+---
+- name: Deploy Flask app
+  hosts: webservers
+  become: yes
+
+  vars:
+    app_dir: /var/www/my-app
+    repo_url: "https://github.com/YOUR-GITHUB-USERNAME/YOUR-REPO-NAME.git"
+
+  tasks:
+    - name: Install required packages
+      apt:
+        name:
+          - git
+          - python3
+          - python3-pip
+          - python3-venv
+        state: present
+        update_cache: yes
+
+    - name: Clone or update repo
+      git:
+        repo: "{{ repo_url }}"
+        dest: "{{ app_dir }}"
+        version: main
+        force: yes
+
+    - name: Create virtual environment
+      command: python3 -m venv {{ app_dir }}/venv
+      args:
+        creates: "{{ app_dir }}/venv"
+
+    - name: Install Python dependencies
+      pip:
+        requirements: "{{ app_dir }}/requirements.txt"
+        virtualenv: "{{ app_dir }}/venv"
+
+    - name: Create systemd service file
+      copy:
+        dest: /etc/systemd/system/my-app.service
+        content: |
+          [Unit]
+          Description=My Flask App
+          After=network.target
+
+          [Service]
+          User=ubuntu
+          WorkingDirectory={{ app_dir }}
+          ExecStart={{ app_dir }}/venv/bin/gunicorn -w 2 -b 0.0.0.0:5000 app:app
+          Restart=always
+
+          [Install]
+          WantedBy=multi-user.target
+
+    - name: Enable and restart app service
+      systemd:
+        name: my-app
+        enabled: yes
+        state: restarted
+        daemon_reload: yes
